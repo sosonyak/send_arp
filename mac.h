@@ -52,6 +52,8 @@ struct Mac final {
 	static Mac& nullMac();
 	static Mac& broadcastMac();
 
+    const uint8_t* getMac() const { return mac_; }
+
 protected:
 	uint8_t mac_[SIZE];
 };
