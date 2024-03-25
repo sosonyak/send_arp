@@ -118,7 +118,7 @@ void arp_packet(EthArpPacket p, const char* s_mac, const char* v_dmac, const cha
 
 int main(int argc, char* argv[]) {
     // printf("argc: %d\n", argc);
-    if ((argc < 2) || (argc % 2 != 0)) { // ----------------------------- the part which need to modify --------------------- //
+    if ((argc < 4) || (argc % 2 != 0)) { // ----------------------------- the part which need to modify --------------------- //
         usage();
         return -1;
     }
