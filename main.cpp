@@ -68,7 +68,7 @@ const char* get_mac(pcap_t* pcap, char* sender){
         if (eth_hdr->type() != eth_hdr->Arp) continue;
         if (arp_hdr->op() != ArpHdr::Reply) continue;
         printf("tip: %x\nsip: %x\nsender: %x\n", arp_hdr->tip(), arp_hdr->sip(), Ip(sender));
-        if (arp_hdr->tip() != Ip(sender)) continue;
+        if (arp_hdr->sip() != Ip(sender)) continue;
 
         char* mac = (char*)malloc(MAC_LEN*3);
         const uint8_t* mac_tmp = arp_hdr->smac().getMac();
@@ -135,8 +135,8 @@ int main(int argc, char* argv[]) {
         char* target_ip = argv[times*2+1];
 //        printf("s_ip: %s, v_ip: %s\n", sender_ip, target_ip);
 
-        // like victim
-        arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, sender_ip, target_ip);
+        // like gateway
+        arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, target_ip, sender_ip);
         int res_gw = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
         if (res_gw != 0) {
             fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_gw, pcap_geterr(handle));
