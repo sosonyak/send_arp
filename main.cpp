@@ -12,9 +12,6 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
-//temp
-#include <iostream>
-//
 
 #define MAC_LEN 6
 #define GW_IP_MAX_LEN 16
@@ -78,7 +75,7 @@ const char* get_mac(pcap_t* pcap, EthArpPacket ep, char* target_ip){
 //        printf("type: %x, arp: %x\n", eth_hdr->type(), eth_hdr->Arp);
         if (eth_hdr->type() != eth_hdr->Arp) continue;
         if (arp_hdr->op() != ArpHdr::Reply) continue;
-        printf("tip: %x\nsip: %x\ntarget_ip: %x\n", arp_hdr->tip(), arp_hdr->sip(), Ip(target_ip));
+//        printf("tip: %x\nsip: %x\ntarget_ip(for me): %x\n", arp_hdr->tip(), arp_hdr->sip(), Ip(target_ip));
         if (arp_hdr->sip() != Ip(target_ip)) continue;
 
         char* mac = (char*)malloc(MAC_LEN*3);
@@ -118,7 +115,7 @@ void arp_packet(EthArpPacket p, const char* s_mac, const char* v_dmac, const cha
 
 int main(int argc, char* argv[]) {
     // printf("argc: %d\n", argc);
-    if ((argc < 4) || (argc % 2 != 0)) { // ----------------------------- the part which need to modify --------------------- //
+    if ((argc < 4) || (argc % 2 != 0)) {
         usage();
         return -1;
     }
@@ -169,9 +166,9 @@ int main(int argc, char* argv[]) {
 
 
         arp_packet(packet, my_mac, victim_mac, victim_mac, ArpHdr::Reply, gw_ip, victim_ip);
-        int res_spoofing = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-        if (res_spoofing != 0) {
-            fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_spoofing, pcap_geterr(handle));
+        int last_res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+        if (last_res != 0) {
+            fprintf(stderr, "pcap_sendpacket return %d error=%s\n", last_res, pcap_geterr(handle));
         }
 
         pcap_close(handle);
